@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sprint Tracker</title>
+<style>
+  :root {
+    --bg: #f6f4ef; --card: #ffffff; --ink: #2b2926; --muted: #8a857c;
+    --line: #e5e1d8; --accent: #b3541e; --accent-soft: #f3e3d7;
+    --ok: #4a7c59; --warn: #c9a227;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: Georgia, "Times New Roman", serif;
+    background: var(--bg); color: var(--ink); min-height: 100vh;
+  }
+  header {
+    padding: 22px 32px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 1.5rem; font-weight: normal; }
+  header h1 em { color: var(--accent); }
+  header .sub { color: var(--muted); font-size: .9rem; }
+  main { display: flex; gap: 0; align-items: stretch; }
+  #left { flex: 1; padding: 24px 32px; min-width: 0; }
+
+  .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; }
+  select, button, textarea, input {
+    font-family: inherit; font-size: .95rem; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 6px; background: var(--card);
+  }
+  select { padding: 7px 10px; }
+  button { padding: 7px 14px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .progress-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 20px; margin-bottom: 18px;
+  }
+  .progress-card .row { display: flex; justify-content: space-between; align-items: baseline; }
+  .bar { height: 10px; background: var(--accent-soft); border-radius: 5px; margin-top: 10px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--accent); border-radius: 5px; transition: width .4s; }
+  .stats { display: flex; gap: 24px; margin-top: 10px; color: var(--muted); font-size: .88rem; }
+  .stats b { color: var(--ink); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--card);
+          border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: .92rem; }
+  th { color: var(--muted); font-weight: normal; font-style: italic; }
+  tr:last-child td { border-bottom: 0; }
+  td.title-cell { max-width: 420px; }
+  td.title-cell a { color: inherit; text-decoration: none; }
+  td.title-cell a:hover { color: var(--accent); }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: .78rem; }
+  .pill.p1 { background: #f4d9d0; } .pill.p2 { background: #f0ead8; } .pill.p3 { background: #e2e8dd; }
+  .state-select { padding: 4px 6px; font-size: .85rem; }
+  .done td { color: var(--muted); }
+  .done td.title-cell { text-decoration: line-through; }
+  .chat-btn { font-size: .8rem; padding: 4px 10px; }
+
+  .desc-toggle {
+    border: 0; background: none; cursor: pointer; color: var(--muted);
+    font-size: .8rem; padding: 0 7px 0 0; width: 20px;
+  }
+  .desc-toggle:hover { color: var(--accent); border: 0; }
+  tr.desc-row td {
+    background: var(--bg); font-size: .88rem; line-height: 1.55;
+    padding: 12px 18px 14px 40px; text-decoration: none; color: var(--ink);
+  }
+  tr.desc-row td p { margin: 0 0 8px; }
+  tr.desc-row td p:last-child { margin-bottom: 0; }
+  tr.desc-row td em.none { color: var(--muted); }
+  .task-actions { margin-top: 12px; display: flex; gap: 8px; align-items: center;
+                  color: var(--muted); font-size: .85rem; }
+  .task-actions select { padding: 4px 6px; font-size: .85rem; }
+  .task-actions button { font-size: .85rem; padding: 4px 12px; }
+  .comments { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
+  .comments h4 { font-weight: normal; font-style: italic; color: var(--muted);
+                 font-size: .85rem; margin-bottom: 6px; }
+  .comment { padding: 7px 10px; background: var(--card); border: 1px solid var(--line);
+             border-radius: 8px; margin-bottom: 6px; line-height: 1.45; font-size: .88rem; }
+  .comment .meta { color: var(--muted); font-size: .78rem; margin-bottom: 3px; }
+  .comment-add { display: flex; gap: 8px; margin-top: 8px; }
+  .comment-add input { flex: 1; padding: 6px 10px; font-size: .88rem; }
+  .comment-add button { font-size: .85rem; }
+
+  #add-form { display: none; gap: 8px; align-items: center; flex-wrap: wrap;
+              background: var(--card); border: 1px solid var(--line);
+              border-radius: 10px; padding: 12px 16px; margin-bottom: 18px; }
+  #add-form.open { display: flex; }
+  #add-form input[type=text] { flex: 1; min-width: 240px; padding: 7px 10px; }
+  #add-form input[type=number] { width: 70px; padding: 7px 8px; }
+
+  #chat {
+    width: 400px; flex-shrink: 0; border-left: 1px solid var(--line);
+    background: var(--card); display: none; flex-direction: column; height: calc(100vh - 71px);
+    position: sticky; top: 0;
+  }
+  #chat.open { display: flex; }
+  #chat-head { padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  #chat-head .t { font-size: .95rem; }
+  #chat-head .close { float: right; cursor: pointer; color: var(--muted); border: 0; background: none; font-size: 1.1rem; }
+  #chat-log { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 88%; padding: 9px 13px; border-radius: 12px; font-size: .9rem; line-height: 1.45; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: var(--accent-soft); }
+  .msg.ai { align-self: flex-start; background: var(--bg); border: 1px solid var(--line); }
+  .msg.sys { align-self: center; color: var(--muted); font-size: .8rem; font-style: italic; background: none; }
+  #chat-input { display: flex; gap: 8px; padding: 14px 18px; border-top: 1px solid var(--line); }
+  #chat-input textarea { flex: 1; resize: none; padding: 8px 10px; height: 60px; }
+  .empty { color: var(--muted); font-style: italic; padding: 30px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sprint <em>Tracker</em></h1>
+  <span class="sub" id="proj-label"></span>
+</header>
+<main>
+  <div id="left">
+    <div class="controls">
+      <label for="sprint-select" class="sub">Sprint</label>
+      <select id="sprint-select"></select>
+      <button id="refresh">Refresh</button>
+      <button id="add-toggle" onclick="$('add-form').classList.toggle('open'); $('new-title').focus()">+ Add task</button>
+    </div>
+    <div id="add-form">
+      <input type="text" id="new-title" placeholder="Task title" onkeydown="if(event.key==='Enter')addTask()">
+      <label class="sub">Priority</label>
+      <select id="new-prio"><option value="1">P1</option><option value="2" selected>P2</option><option value="3">P3</option></select>
+      <label class="sub">Points</label>
+      <input type="number" id="new-pts" value="1" min="0.5" step="0.5">
+      <button class="primary" onclick="addTask()">Add to this sprint</button>
+      <button onclick="$('add-form').classList.remove('open')">Cancel</button>
+    </div>
+    <div class="progress-card" id="progress" style="display:none">
+      <div class="row"><span id="sprint-title"></span><span id="sprint-dates" class="sub"></span></div>
+      <div class="bar"><div id="bar-fill" style="width:0%"></div></div>
+      <div class="stats">
+        <span><b id="st-done">0</b> done</span>
+        <span><b id="st-active">0</b> active</span>
+        <span><b id="st-new">0</b> not started</span>
+        <span><b id="st-pts">0/0</b> points</span>
+      </div>
+    </div>
+    <div id="task-area"></div>
+  </div>
+
+  <aside id="chat">
+    <div id="chat-head">
+      <button class="close" onclick="closeChat()">&times;</button>
+      <div class="t" id="chat-task-title"></div>
+      <div class="sub" id="chat-task-meta"></div>
+    </div>
+    <div id="chat-log"></div>
+    <div id="chat-input">
+      <textarea id="chat-text" placeholder="Discuss this task…  (Enter to send)"></textarea>
+      <button class="primary" id="chat-send">Send</button>
+    </div>
+  </aside>
+</main>
+
+<script>
+let STATES = [], TASKS = [], SPRINTS = [], AI_ENABLED = false, AI_PROVIDER = null;
+let EXPANDED = new Set();   // task ids with the description panel open
+let chatTask = null, chatMessages = [], chatBusy = false;
+const $ = id => document.getElementById(id);
+const esc = s => (s || "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+
+async function init() {
+  const cfg = await api("/api/config");
+  AI_ENABLED = cfg.ai_enabled;
+  AI_PROVIDER = cfg.ai_provider;
+  $("proj-label").textContent = cfg.org + " / " + cfg.project;
+  STATES = await api("/api/states");
+  const sprints = await api("/api/sprints");
+  SPRINTS = sprints;
+  const sel = $("sprint-select");
+  sel.innerHTML = sprints.map(s =>
+    `<option value="${esc(s.path)}" data-name="${esc(s.name)}" data-dates="${s.start} → ${s.finish}"
+      ${s.timeframe === "current" ? "selected" : ""}>${esc(s.name)} (${s.start})${s.timeframe === "current" ? " — current" : ""}</option>`
+  ).join("");
+  sel.onchange = loadSprint;
+  $("refresh").onclick = loadSprint;
+  await loadSprint();
+}
+
+async function loadSprint() {
+  const sel = $("sprint-select");
+  const opt = sel.selectedOptions[0];
+  if (!opt) return;
+  $("task-area").innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    TASKS = await api("/api/sprints/" + encodeURIComponent(opt.value) + "/tasks");
+  } catch (e) {
+    $("task-area").innerHTML = '<div class="empty">Failed to load: ' + esc(e.message) + "</div>";
+    return;
+  }
+  $("sprint-title").textContent = opt.dataset.name;
+  $("sprint-dates").textContent = opt.dataset.dates;
+  EXPANDED.clear();
+  render();
+}
+
+function isDone(st) { return ["Closed", "Done", "Resolved", "Completed"].includes(st); }
+function isActive(st) { return ["Active", "Doing", "In Progress", "Committed"].includes(st); }
+
+function render() {
+  $("progress").style.display = "block";
+  const done = TASKS.filter(t => isDone(t.state));
+  const active = TASKS.filter(t => isActive(t.state));
+  const totPts = TASKS.reduce((a, t) => a + (t.points || 0), 0);
+  const donePts = done.reduce((a, t) => a + (t.points || 0), 0);
+  $("st-done").textContent = done.length;
+  $("st-active").textContent = active.length;
+  $("st-new").textContent = TASKS.length - done.length - active.length;
+  $("st-pts").textContent = donePts + "/" + totPts;
+  $("bar-fill").style.width = (totPts ? Math.round(100 * donePts / totPts) : 0) + "%";
+
+  if (!TASKS.length) {
+    $("task-area").innerHTML = '<div class="empty">No tasks in this sprint.</div>';
+    return;
+  }
+  $("task-area").innerHTML = `<table><thead>
+    <tr><th>Task</th><th>Area</th><th>Priority</th><th>Pts</th><th>State</th><th></th></tr>
+    </thead><tbody>` + TASKS.map(t => `
+    <tr class="${isDone(t.state) ? "done" : ""}" id="row-${t.id}">
+      <td class="title-cell">
+        <button class="desc-toggle" onclick="toggleDesc(${t.id})"
+          title="${EXPANDED.has(t.id) ? "Hide" : "Show"} description">${EXPANDED.has(t.id) ? "▾" : "▸"}</button><a href="${t.url}" target="_blank" title="Open in Azure DevOps">${esc(t.title)}</a></td>
+      <td>${esc(t.area)}</td>
+      <td>${t.priority ? `<span class="pill p${t.priority}">P${t.priority}</span>` : ""}</td>
+      <td>${t.points ?? ""}</td>
+      <td><select class="state-select" onchange="setState(${t.id}, this)">
+        ${STATES.map(s => `<option ${s === t.state ? "selected" : ""}>${esc(s)}</option>`).join("")}
+      </select></td>
+      <td><button class="chat-btn" onclick="openChat(${t.id})">💬 AI</button></td>
+    </tr>
+    <tr class="desc-row" id="desc-${t.id}" style="display:${EXPANDED.has(t.id) ? "table-row" : "none"}">
+      <td colspan="6">
+        <div>${t.description || '<em class="none">No description.</em>'}</div>
+        <div class="task-actions">
+          Move to
+          <select id="move-${t.id}">
+            ${SPRINTS.map(s => `<option value="${esc(s.path)}" ${s.path === t.iteration ? "selected" : ""}>${esc(s.name)}${s.timeframe === "current" ? " (current)" : ""}</option>`).join("")}
+          </select>
+          <button onclick="moveTask(${t.id})">Move</button>
+        </div>
+        <div class="comments" id="comments-${t.id}"><h4>Comments</h4><em class="none">loading…</em></div>
+        <div class="comment-add">
+          <input id="cmt-${t.id}" placeholder="Add a progress comment…" onkeydown="if(event.key==='Enter')addComment(${t.id})">
+          <button onclick="addComment(${t.id})">Comment</button>
+        </div>
+      </td>
+    </tr>`).join("") + "</tbody></table>";
+  EXPANDED.forEach(loadComments);
+}
+
+function toggleDesc(id) {
+  EXPANDED.has(id) ? EXPANDED.delete(id) : EXPANDED.add(id);
+  const row = $("desc-" + id);
+  const btn = document.querySelector(`#row-${id} .desc-toggle`);
+  const open = EXPANDED.has(id);
+  row.style.display = open ? "table-row" : "none";
+  btn.textContent = open ? "▾" : "▸";
+  btn.title = (open ? "Hide" : "Show") + " description";
+  if (open) loadComments(id);
+}
+
+async function loadComments(id) {
+  const box = $("comments-" + id);
+  if (!box) return;
+  try {
+    const comments = await api(`/api/tasks/${id}/comments`);
+    box.innerHTML = "<h4>Comments</h4>" + (comments.length
+      ? comments.map(c => `<div class="comment">
+          <div class="meta">${esc(c.by)} · ${esc(c.date)}</div>${c.text}</div>`).join("")
+      : '<em class="none">No comments yet.</em>');
+  } catch (e) {
+    box.innerHTML = '<h4>Comments</h4><em class="none">Failed to load: ' + esc(e.message) + "</em>";
+  }
+}
+
+async function addComment(id) {
+  const input = $("cmt-" + id);
+  const text = input.value.trim();
+  if (!text) return;
+  input.disabled = true;
+  try {
+    await api(`/api/tasks/${id}/comments`, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({text}),
+    });
+    input.value = "";
+    await loadComments(id);
+  } catch (e) {
+    alert("Comment failed: " + e.message);
+  } finally {
+    input.disabled = false;
+    input.focus();
+  }
+}
+
+async function moveTask(id) {
+  const sel = $("move-" + id);
+  const t = TASKS.find(x => x.id === id);
+  if (!sel || !t || sel.value === t.iteration) return;
+  sel.disabled = true;
+  try {
+    await api("/api/tasks/" + id, {
+      method: "PATCH", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({iteration: sel.value}),
+    });
+    EXPANDED.delete(id);
+    await loadSprint();   // task left this sprint — refresh the list
+  } catch (e) {
+    alert("Move failed: " + e.message);
+    sel.disabled = false;
+  }
+}
+
+async function addTask() {
+  const title = $("new-title").value.trim();
+  if (!title) { $("new-title").focus(); return; }
+  const opt = $("sprint-select").selectedOptions[0];
+  try {
+    await api("/api/tasks", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        title,
+        priority: parseInt($("new-prio").value, 10),
+        points: parseFloat($("new-pts").value) || 1,
+        iteration: opt ? opt.value : undefined,
+      }),
+    });
+    $("new-title").value = "";
+    $("add-form").classList.remove("open");
+    await loadSprint();
+  } catch (e) {
+    alert("Add failed: " + e.message);
+  }
+}
+
+async function setState(id, sel) {
+  sel.disabled = true;
+  try {
+    const updated = await api("/api/tasks/" + id, {
+      method: "PATCH", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({state: sel.value}),
+    });
+    Object.assign(TASKS.find(t => t.id === id), updated);
+    render();
+  } catch (e) {
+    alert("Update failed: " + e.message);
+    sel.disabled = false;
+  }
+}
+
+function openChat(id) {
+  chatTask = TASKS.find(t => t.id === id);
+  chatMessages = [];
+  $("chat-task-title").textContent = "#" + chatTask.id + " · " + chatTask.title;
+  $("chat-task-meta").textContent =
+    chatTask.area + " · P" + (chatTask.priority ?? "?") + " · " + (chatTask.points ?? "?") + " pts · " + chatTask.state;
+  $("chat-log").innerHTML = "";
+  addMsg("sys", AI_ENABLED
+    ? "Ask anything about this task — the assistant (" + AI_PROVIDER + ") can update it for you."
+    : "AI chat is disabled: set ANTHROPIC_API_KEY or OPENAI_API_KEY in sprint-tracker/.env and restart.");
+  $("chat").classList.add("open");
+  $("chat-text").focus();
+}
+function closeChat() { $("chat").classList.remove("open"); chatTask = null; }
+
+function addMsg(kind, text) {
+  const div = document.createElement("div");
+  div.className = "msg " + kind;
+  div.textContent = text;
+  $("chat-log").appendChild(div);
+  $("chat-log").scrollTop = $("chat-log").scrollHeight;
+  return div;
+}
+
+async function sendChat() {
+  const box = $("chat-text");
+  const text = box.value.trim();
+  if (!text || !chatTask || chatBusy || !AI_ENABLED) return;
+  box.value = "";
+  chatBusy = true;
+  addMsg("user", text);
+  chatMessages.push({role: "user", content: text});
+  const pending = addMsg("sys", "thinking…");
+  try {
+    const res = await api("/api/chat", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({task_id: chatTask.id, messages: chatMessages}),
+    });
+    pending.remove();
+    addMsg("ai", res.reply);
+    if (res.usage) {
+      const u = res.usage, fmt = n => n >= 1000 ? (n / 1000).toFixed(1) + "k" : n;
+      addMsg("sys", `tokens: ${fmt(u.input)} in / ${fmt(u.output)} out` +
+        (u.cache_read ? ` (${fmt(u.cache_read)} cached)` : ""));
+    }
+    chatMessages.push({role: "assistant", content: res.reply});
+    if (res.task) {   // assistant changed/moved/created a task — reload the sprint
+      await loadSprint();
+      addMsg("sys", "plan updated ✓");
+    }
+  } catch (e) {
+    pending.remove();
+    addMsg("sys", "error: " + e.message);
+    chatMessages.pop();
+  } finally {
+    chatBusy = false;
+  }
+}
+$("chat-send").onclick = sendChat;
+$("chat-text").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); }
+});
+
+init().catch(e => $("task-area").innerHTML = '<div class="empty">Startup failed: ' + esc(e.message) + "</div>");
+</script>
+</body>
+</html>
