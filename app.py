@@ -30,8 +30,35 @@ load_dotenv(HERE.parent / "vs-master-plan" / "vs-master-plan" / ".env")
 ORG = os.getenv("AZURE_DEVOPS_ORG", "VS-EnterpriseAI")
 PAT = os.getenv("AZURE_DEVOPS_PAT", "")
 PROJECT = os.getenv("AZURE_DEVOPS_PROJECT", "VS-EnterpriseAI")
-TEAM = os.getenv("AZURE_DEVOPS_TEAM", f"{PROJECT} Team")
+ENV_PROJECT = PROJECT   # the project the .env (and its context doc) belongs to
 BASE = f"https://dev.azure.com/{ORG}"
+
+# The active org/project can be switched at runtime (project dropdown, AI
+# planner); the choice is persisted in state.json so it survives restarts.
+STATE_FILE = HERE / "state.json"
+try:
+    _state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    ORG = _state.get("org") or ORG
+    PROJECT = _state.get("project") or PROJECT
+    BASE = f"https://dev.azure.com/{ORG}"
+except (OSError, ValueError):
+    pass
+
+_env_team = os.getenv("AZURE_DEVOPS_TEAM")
+TEAM = _env_team if (_env_team and PROJECT == ENV_PROJECT) else f"{PROJECT} Team"
+
+
+def set_active(org, project):
+    """Switch the dashboard to another org/project and persist the choice."""
+    global ORG, PROJECT, TEAM, BASE
+    ORG, PROJECT = org, project
+    TEAM = f"{project} Team"
+    BASE = f"https://dev.azure.com/{org}"
+    try:
+        STATE_FILE.write_text(json.dumps({"org": org, "project": project}),
+                              encoding="utf-8")
+    except OSError:
+        pass
 
 def ai_provider():
     """'anthropic' or 'openai', by AI_PROVIDER env or whichever key is set."""
@@ -213,6 +240,11 @@ def index():
     return send_from_directory(app.static_folder, "index.html")
 
 
+@app.get("/planner.html")
+def planner_page():
+    return send_from_directory(app.static_folder, "planner.html")
+
+
 @app.get("/api/config")
 def config():
     return jsonify({
@@ -221,6 +253,28 @@ def config():
         "ai_enabled": ai_provider() is not None,
         "ai_provider": ai_provider(),
     })
+
+
+@app.get("/api/projects")
+def projects():
+    data = ado_get("_apis/projects", **{"api-version": "7.0"})
+    return jsonify(sorted(p["name"] for p in data.get("value", [])))
+
+
+@app.post("/api/config")
+def set_config():
+    body = request.get_json(force=True)
+    project = (body.get("project") or "").strip()
+    org = (body.get("org") or ORG).strip()
+    if not project:
+        return jsonify({"error": "project is required"}), 400
+    r = requests.get(f"https://dev.azure.com/{org}/_apis/projects/{project}"
+                     f"?api-version=7.0", headers=_headers(), timeout=15)
+    if r.status_code != 200:
+        return jsonify({"error": f"Project '{project}' not found in org "
+                                 f"'{org}' (or the PAT has no access)."}), 400
+    set_active(org, project)
+    return jsonify({"org": ORG, "project": PROJECT})
 
 
 @app.get("/api/sprints")
@@ -421,7 +475,8 @@ CHAT_TOOLS = [
     },
 ]
 
-BASE_PROMPT = (
+def base_prompt():
+    return (
     "You are a sprint assistant for the user's personal Azure DevOps project "
     f"'{PROJECT}'. The user is discussing one specific task with you. Help them "
     "think it through — clarify scope, break work down, adjust estimates, or "
@@ -443,14 +498,18 @@ BASE_PROMPT = (
     "Confirm what you changed after a tool call. Keep replies short and "
     "conversational; this is a chat panel, not a report. "
     "Do not invent fields or change anything the user did not ask for."
-)
+    )
 
 CONTEXT_FILE = HERE / "vs-ai-assistant-context.md"
 _context_cache = {"mtime": None, "text": ""}
 
 
 def system_prompt():
-    """BASE_PROMPT plus the app-purpose context document, reloaded on change."""
+    """base_prompt() plus the app-purpose context document, reloaded on change.
+    The context doc describes the original personal plan, so it is only
+    attached while that project is the active one."""
+    if PROJECT != ENV_PROJECT:
+        return base_prompt()
     try:
         mtime = CONTEXT_FILE.stat().st_mtime
         if _context_cache["mtime"] != mtime:
@@ -459,9 +518,9 @@ def system_prompt():
     except OSError:
         _context_cache.update(mtime=None, text="")
     if not _context_cache["text"]:
-        return BASE_PROMPT
+        return base_prompt()
     return (
-        BASE_PROMPT
+        base_prompt()
         + "\n\nThe full context for this application — its purpose, the plan "
           "structure, financial decisions, capacity rules, and compliance "
           "guardrails — follows. Treat it as authoritative. One override: "
@@ -668,6 +727,11 @@ def chat():
         return jsonify({"reply": reply, "task": updated, "usage": usage})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+import planner   # noqa: E402  (needs app config loaded)
+planner.tracker = sys.modules[__name__]
+app.register_blueprint(planner.bp)
 
 
 if __name__ == "__main__":

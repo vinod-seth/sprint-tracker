@@ -22,6 +22,10 @@
   header h1 { font-size: 1.5rem; font-weight: normal; }
   header h1 em { color: var(--accent); }
   header .sub { color: var(--muted); font-size: .9rem; }
+  header select { padding: 5px 8px; font-size: .88rem; }
+  header a#planner-link { margin-left: auto; color: var(--muted);
+    font-size: .9rem; text-decoration: none; }
+  header a#planner-link:hover { color: var(--accent); }
   main { display: flex; gap: 0; align-items: stretch; }
   #left { flex: 1; padding: 24px 32px; min-width: 0; }
 
@@ -116,6 +120,8 @@
 <header>
   <h1>Sprint <em>Tracker</em></h1>
   <span class="sub" id="proj-label"></span>
+  <select id="project-select" title="Switch project"></select>
+  <a href="/planner.html" id="planner-link">✨ AI Planner</a>
 </header>
 <main>
   <div id="left">
@@ -179,7 +185,8 @@ async function init() {
   const cfg = await api("/api/config");
   AI_ENABLED = cfg.ai_enabled;
   AI_PROVIDER = cfg.ai_provider;
-  $("proj-label").textContent = cfg.org + " / " + cfg.project;
+  $("proj-label").textContent = cfg.org + " /";
+  loadProjects(cfg.project);   // fills the project dropdown in the background
   STATES = await api("/api/states");
   const sprints = await api("/api/sprints");
   SPRINTS = sprints;
@@ -191,6 +198,31 @@ async function init() {
   sel.onchange = loadSprint;
   $("refresh").onclick = loadSprint;
   await loadSprint();
+}
+
+async function loadProjects(current) {
+  const sel = $("project-select");
+  try {
+    const names = await api("/api/projects");
+    if (!names.includes(current)) names.unshift(current);
+    sel.innerHTML = names.map(n =>
+      `<option ${n === current ? "selected" : ""}>${esc(n)}</option>`).join("");
+    sel.onchange = async () => {
+      sel.disabled = true;
+      try {
+        await api("/api/config", {
+          method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({project: sel.value}),
+        });
+        location.reload();
+      } catch (e) {
+        alert("Switch failed: " + e.message);
+        sel.disabled = false;
+      }
+    };
+  } catch (e) {
+    sel.innerHTML = `<option>${esc(current)}</option>`;
+  }
 }
 
 async function loadSprint() {
